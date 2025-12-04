@@ -59,6 +59,30 @@ class NoiseGenerator:
         self.low = low
         self.high = high
 
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        """
+        Adds noise to the input image tensor (for compatibility with torchvision transforms).
+
+        Args:
+            img (torch.Tensor): Input image tensor.
+
+        Returns:
+            torch.Tensor: Generated noise tensor added to the input image.
+        """
+        return self.generate(img)
+
+    def __repr__(self):
+        """
+        String representation of the NoiseGenerator instance.
+
+        Returns:
+            str: String representation.
+        """
+        if self.noise_type == 'gaussian':
+            return f"{self.__class__.__name__}(noise_type='{self.noise_type}', mean={self.mean}, std={self.std})"
+        else:
+            return f"{self.__class__.__name__}(noise_type='{self.noise_type}', low={self.low}, high={self.high})"
+
     def generate(self, img: torch.Tensor) -> torch.Tensor:
         """
         Adds noise to the input image tensor.

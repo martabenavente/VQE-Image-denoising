@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from src.noise_generation import NoiseGenerator, visualize_noise
+from src.noise_generation import NoiseGenerator
 from examples.load_data_example import load_mnist_from_kaggle
 
 
@@ -13,9 +13,6 @@ class TestNoiseGenerator:
         generator = NoiseGenerator(noise_type='gaussian', mean=0.0, std=0.1)
         img = torch.zeros(3, 64, 64)
         noisy_img = generator.generate(img)
-
-        # Draw images and check properties
-        visualize_noise(img, noisy_img, title='Gaussian Noise Generation')
 
         assert noisy_img.shape == img.shape
         assert not torch.equal(noisy_img, img)
@@ -97,7 +94,14 @@ class TestNoiseGenerator:
         img = torch.tensor(train_images[0]).unsqueeze(0).float() / 255.0
         noisy_img = generator.generate(img)
 
-        visualize_noise(img, noisy_img, title='Unform Real Noise Generation')
+        assert noisy_img.shape == img.shape
+        assert not torch.equal(noisy_img, img)
+
+    def test_noise_generator_call(self):
+        """Test the __call__ method of NoiseGenerator."""
+        generator = NoiseGenerator(noise_type='gaussian', mean=0.0, std=0.5)
+        img = torch.zeros(3, 64, 64)
+        noisy_img = generator(img)
 
         assert noisy_img.shape == img.shape
         assert not torch.equal(noisy_img, img)
