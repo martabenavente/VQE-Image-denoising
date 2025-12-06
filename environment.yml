@@ -40,4 +40,5 @@ dependencies:
   - torch
   - numpy
   - pytest
+  - qiskit
 prefix: /home/yeray142/miniconda3/envs/VQE-Image-denoising
