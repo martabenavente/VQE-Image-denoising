@@ -1,8 +1,17 @@
+# import os
+# import sys
+
+# CURRENT_DIR = os.path.dirname(__file__)
+# PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
+# if PROJECT_ROOT not in sys.path:
+#     sys.path.insert(0, PROJECT_ROOT)
+
 import pytest
 import numpy as np
 
 from qiskit import QuantumCircuit
 from src.circuits.encoding_circuit import AngleEmbeddingCircuit
+from src.circuits.ansatz_circuit import SimpleAnsatzCircuit
 
 
 class MockAngleEmbeddingCircuit(AngleEmbeddingCircuit):
@@ -303,3 +312,68 @@ class TestAngleEmbeddingCircuit:
         gate_names = [instr.operation.name for instr in bound_qc.data]
         assert 'h' not in gate_names
         assert 'rz' in gate_names
+
+
+def test_simple_ansatz_builds_full_circuit():
+    """ Test the construction of a complete circuit (encoding + ansatz) and the num. of parameters = num_features + num_parameters. """
+    circuit = SimpleAnsatzCircuit(
+        num_qubits=4,
+        num_features=4,
+        num_parameters=4,
+        rotation='Y',
+        use_hadamard=True,
+    )
+
+    qc = circuit.build_circuit()
+
+    assert isinstance(qc, QuantumCircuit)
+    assert qc.num_qubits == 4
+
+    assert len(qc.parameters) == circuit.get_num_parameters()
+    assert circuit.get_num_parameters() == circuit.num_features + circuit.num_parameters
+
+
+def test_simple_ansatz_uses_parameter_vectors_only():
+    """ Test the parameters of the circuit (no numerical values) """
+    circuit = SimpleAnsatzCircuit(
+        num_qubits=3,
+        num_features=3,
+        num_parameters=3,
+        rotation='Z',
+        use_hadamard=False,
+    )
+
+    qc = circuit.build_circuit()
+
+    for p in qc.parameters:
+        assert hasattr(p, "name")
+
+
+def test_simple_ansatz_can_bind_parameters():
+    """ Test numerical values can be asigned to all parameters. """
+    num_qubits = 4
+    num_features = 4
+    num_parameters = 4
+
+    circuit = SimpleAnsatzCircuit(
+        num_qubits=num_qubits,
+        num_features=num_features,
+        num_parameters=num_parameters,
+        rotation='Y',
+        use_hadamard=True,
+    )
+
+    qc = circuit.build_circuit()
+
+    feature_values = np.linspace(0, np.pi, num_features)
+    weight_values = np.linspace(0, np.pi/2, num_parameters)
+
+    param_dict = {
+        **{circuit.feature_params[i]: float(feature_values[i]) for i in range(num_features)},
+        **{circuit.weight_params[i]: float(weight_values[i]) for i in range(num_parameters)},
+    }
+
+    bound_qc = qc.assign_parameters(param_dict)
+
+    assert len(bound_qc.parameters) == 0
+    assert bound_qc.depth() > 0
