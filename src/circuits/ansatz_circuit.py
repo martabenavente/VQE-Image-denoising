@@ -1,4 +1,5 @@
 from qiskit import QuantumCircuit
+from typing import Literal
 
 from src.circuits.encoding_circuit import AngleEmbeddingCircuit
 
@@ -14,6 +15,16 @@ class SimpleAnsatzCircuit(AngleEmbeddingCircuit):
         rotation (str): Rotation gate type ('X', 'Y', or 'Z'). Default 'Y'.
         use_hadamard (bool): Apply Hadamard gates before encoding. Default True.
     """
+
+    def __init__(
+            self,
+            num_qubits: int,
+            num_features: int,
+            num_parameters: int,
+            rotation: Literal['X', 'Y', 'Z'] = 'Y',
+            use_hadamard: bool = True
+    ):
+        super().__init__(num_qubits, num_features, num_parameters, rotation, use_hadamard)
 
     def ansatz_layer(self) -> QuantumCircuit:  
         ## Initial simple ansatz with less parameters, when the complete pipeline works we can update it (add layers, alternate rotations...).
