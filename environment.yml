@@ -41,6 +41,4 @@ dependencies:
   - numpy
   - pytest
   - qiskit
-  - qiskit-machine-learning
-  - tqdm
 prefix: /home/yeray142/miniconda3/envs/VQE-Image-denoising
