@@ -1,11 +1,12 @@
 import torch
+import json
+import pickle
+
 from pathlib import Path
 from datetime import datetime
-import json
-
 from qiskit_machine_learning.connectors import TorchConnector
 
-from src.data.dataloaders import create_mnist_patches_dataloaders
+from src.data.dataloaders import train_dataset, test_dataset
 from src.circuits.ansatz_circuit import SimpleAnsatzCircuit
 from src.qnn.qnn_builder import QNNBuilder
 from src.training.trainer import QiskitTrainer
@@ -23,7 +24,7 @@ def train_model():
         'batch_size': 16,  # Smaller batches for quantum circuits
         'train_split': 0.85,
         'epochs': 50,
-        'learning_rate': 0.01,
+        'learning_rate': 0.001,
         'weight_decay': 1e-4,
         'gradient_clip': 1.0,
         'early_stopping_patience': 10,
@@ -64,22 +65,8 @@ def train_model():
     print("Loading MNIST Dataset and Creating Patches...")
     print("-" * 80)
 
-    dataloaders = create_mnist_patches_dataloaders(
-        stride=config['stride'],
-        patch_size=config['patch_size'],
-        noise_config=noise_configs,
-        batch_size=config['batch_size'],
-        train_split=config['train_split'],
-        flatten=True,
-        normalize=True,
-        num_workers=0,
-        shuffle_train=True,
-        random_seed=config['random_seed'],
-        data_path="/home/yeray142/Documents/projects/VQE-Image-denoising/_dev-data/datasets/hojjatk/mnist-dataset/versions/1"
-    )
-
-    train_loader = dataloaders['train']
-    val_loader = dataloaders['val']
+    train_loader = train_dataset(n_samples=500)
+    val_loader = test_dataset(n_samples=50)
 
     print(f"\nDataset Statistics:")
     print(f"  Total training patches: {len(train_loader.dataset):,}")
@@ -93,14 +80,16 @@ def train_model():
     print("Building Quantum Neural Network...")
     print("-" * 80)
 
+    # TODO: Check this part to adapt the VQA circuit to the new config
     circuit = SimpleAnsatzCircuit(
         num_qubits=config['num_qubits'],
         num_features=config['num_qubits'],
         num_parameters=config['num_qubits']
     )
-
     qnn_builder = QNNBuilder(circuit_base=circuit)
     qnn = qnn_builder.build_qnn(input_gradients=True)
+    # TODO: Update this part to adapt the model to AutoEncoder style model
+    model_wrapper = TorchConnector(qnn)
 
     print(f"\nQuantum Circuit Details:")
     print(f"  Number of qubits: {config['num_qubits']}")
@@ -110,11 +99,10 @@ def train_model():
     print(f"  Total parameters: {len(circuit.feature_params) + len(circuit.weight_params)}")
 
     # Setup loss and metrics
-    loss_fn = DenoisingLoss(loss_type='combined', alpha=0.84)
+    loss_fn = DenoisingLoss(loss_type='mse')
     metrics = DenoisingMetrics(data_range=1.0)
 
     # Setup optimizer with weight decay
-    model_wrapper = TorchConnector(qnn)
     optimizer = torch.optim.Adam(
         model_wrapper.parameters(),
         lr=config['learning_rate'],
@@ -146,7 +134,6 @@ def train_model():
         early_stopping_metric='loss',
         early_stopping_mode='min'
     )
-
     trainer.set_scheduler(scheduler)
 
     print(f"  Device: {trainer.device}")
@@ -208,7 +195,6 @@ def train_model():
     print(f"Best Validation Loss: {min(history['val_loss']):.6f}")
 
     # Save history
-    import pickle
     with open(checkpoint_dir / 'training_history.pkl', 'wb') as f:
         pickle.dump(history, f)
 

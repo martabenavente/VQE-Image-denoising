@@ -7,7 +7,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from qiskit_machine_learning.connectors import TorchConnector
-from qiskit_machine_learning.neural_networks import EstimatorQNN
+from noise_generation import add_gaussian_noise
 
 
 class QiskitTrainer:
@@ -120,31 +120,16 @@ class QiskitTrainer:
             self.metrics.reset()
 
         iterator = tqdm(train_loader, desc=f'Epoch {epoch} [Train]') if verbose else train_loader
-
         for batch_idx, batch in enumerate(iterator):
-            # Unpack batch - flexible to handle different formats
-            if isinstance(batch, (tuple, list)):
-                if len(batch) == 2:
-                    inputs, targets = batch
-                else:
-                    # Handle cases like (inputs, noisy, targets) for denoising
-                    inputs = batch[0]
-                    targets = batch[-1]  # Assume last element is target
-            else:
-                raise ValueError("Batch should be tuple/list with at least 2 elements")
+            images, _ = batch
 
-            inputs = inputs.to(self.device)
-            targets = targets.to(self.device)
+            # TODO: Update this to do it in Dataloader instead of here
+            noisy_images = add_gaussian_noise(images)
 
             # Forward pass
             self.optimizer.zero_grad()
-            outputs = self.model(inputs)
-
-            # Reshape outputs if needed to match target shape
-            if outputs.dim() != targets.dim():
-                outputs = outputs.view(targets.shape)
-
-            loss = self.loss_fn(outputs, targets)
+            outputs = self.model(noisy_images)
+            loss = self.loss_fn(outputs, images)
             loss.backward()
 
             if self.gradient_clip is not None:
@@ -153,18 +138,22 @@ class QiskitTrainer:
                     self.gradient_clip
                 )
             self.optimizer.step()
+            epoch_loss += loss.item() * images.size(0)
 
-            epoch_loss += loss.item() * inputs.size(0)
+            # TODO: Remove hardcoded reshape
+            outputs = outputs.detach().view(len(images), 1, 28, 28)
+
             if self.metrics:
-                self.metrics.update(outputs.detach(), targets.detach())
+                self.metrics.update(outputs, images)
 
             if verbose:
                 iterator.set_postfix({'loss': loss.item()})
 
-        avg_loss = epoch_loss / len(train_loader.dataset)
+        avg_loss = epoch_loss / len(train_loader)
         results = {'loss': avg_loss}
 
         if self.metrics:
+            # TODO: Check if metrics are averaged correctly over epoch
             metric_values = self.metrics.compute()
             results.update(metric_values)
 
@@ -356,7 +345,7 @@ class QiskitTrainer:
         Returns:
             Training history dictionary
         """
-        for epoch in range(1, epochs + 1):
+        for epoch in tqdm(range(1, epochs + 1)):
             # Training
             train_metrics = self._train_epoch(train_loader, epoch, verbose)
             self.history['train_loss'].append(train_metrics['loss'])
@@ -400,7 +389,6 @@ class QiskitTrainer:
             # Checkpointing
             if save_frequency > 0 and epoch % save_frequency == 0:
                 self.save_checkpoint(epoch, val_metrics or train_metrics)
-
             if val_metrics and self.checkpoint_dir:
                 is_best = (val_metrics[self.early_stopping_metric] == self._best_metric)
                 if is_best:

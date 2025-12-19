@@ -1,7 +1,8 @@
 import torch
 import numpy as np
 
-from skimage.metrics import structural_similarity
+from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import peak_signal_noise_ratio as psnr
 from typing import Dict
 
 
@@ -61,14 +62,14 @@ class DenoisingMetrics:
         batch_size = denoised.shape[0]
 
         # Calculate batch metrics
-        psnr = self._calculate_psnr(denoised, clean)
-        ssim = self._calculate_ssim(denoised, clean)
+        psnr_val = self._calculate_psnr(denoised, clean)
+        ssim_val = self._calculate_ssim(denoised, clean)
         mse = _calculate_mse(denoised, clean)
         mae = _calculate_mae(denoised, clean)
 
         # Accumulate
-        self.metrics_sum['psnr'] += psnr * batch_size
-        self.metrics_sum['ssim'] += ssim * batch_size
+        self.metrics_sum['psnr'] += psnr_val * batch_size
+        self.metrics_sum['ssim'] += ssim_val * batch_size
         self.metrics_sum['mse'] += mse * batch_size
         self.metrics_sum['mae'] += mae * batch_size
         self.count += batch_size
@@ -89,58 +90,33 @@ class DenoisingMetrics:
         }
 
     def _calculate_psnr(self, denoised: torch.Tensor, clean: torch.Tensor) -> float:
-        """Calculate Peak Signal-to-Noise Ratio."""
-        mse = torch.mean((denoised - clean) ** 2)
-        if mse == 0:
-            return 100.0  # Perfect match
-        psnr = 20 * torch.log10(self.data_range / torch.sqrt(mse))
-        return psnr.item()
+        """Calculate Peak Signal-to-Noise Ratio using skimage."""
+        batch_psnr = 0.0
+
+        for i in range(len(denoised)):
+            org = np.transpose(clean[i], (1, 2, 0)).detach().cpu().numpy()
+            denoise = np.transpose(denoised[i], (1, 2, 0)).detach().cpu().numpy()
+            batch_psnr += psnr(org, denoise, data_range=self.data_range)
+
+        return batch_psnr / len(denoised)
 
     def _calculate_ssim(self, denoised: torch.Tensor, clean: torch.Tensor) -> float:
-        """Calculate Structural Similarity Index."""
-        # Move to CPU and convert to numpy
-        denoised_np = denoised.detach().cpu().numpy()
-        clean_np = clean.detach().cpu().numpy()
+        """Calculate Structural Similarity Index using skimage."""
+        batch_ssim = 0.0
 
-        # Determine appropriate window size based on image size
-        _, _, height, width = denoised_np.shape
-        min_dim = min(height, width)
+        for i in range(len(denoised)):
+            org = np.transpose(clean[i], (1, 2, 0)).detach().cpu().numpy()
+            denoise = np.transpose(denoised[i], (1, 2, 0)).detach().cpu().numpy()
 
-        # SSIM requires odd window size, max 7, must be <= min dimension
-        if min_dim >= 7:
-            win_size = 7
-        elif min_dim >= 5:
-            win_size = 5
-        elif min_dim >= 3:
-            win_size = 3
-        else:
-            # For very small patches, return MSE-based approximation
-            return 1.0 - _calculate_mse(denoised, clean)
+            # Handle grayscale (H, W, 1) by squeezing
+            if org.shape[2] == 1:
+                org = org.squeeze(axis=2)
+                denoise = denoise.squeeze(axis=2)
+                batch_ssim += ssim(org, denoise, data_range=self.data_range)
+            else:
+                batch_ssim += ssim(org, denoise, data_range=self.data_range, channel_axis=2)
 
-        ssim_values = []
-        for i in range(denoised_np.shape[0]):
-            # Handle grayscale vs RGB
-            if denoised_np.shape[1] == 1:  # Grayscale
-                img1 = denoised_np[i, 0]
-                img2 = clean_np[i, 0]
-                ssim = structural_similarity(
-                    img1, img2,
-                    data_range=self.data_range,
-                    win_size=win_size
-                )
-            else:  # RGB or multi-channel
-                # Transpose from (C, H, W) to (H, W, C)
-                img1 = np.transpose(denoised_np[i], (1, 2, 0))
-                img2 = np.transpose(clean_np[i], (1, 2, 0))
-                ssim = structural_similarity(
-                    img1, img2,
-                    data_range=self.data_range,
-                    channel_axis=-1,
-                    win_size=win_size
-                )
-            ssim_values.append(ssim)
-
-        return float(np.mean(ssim_values))
+        return batch_ssim / len(denoised)
 
     @staticmethod
     def compute_single_batch(

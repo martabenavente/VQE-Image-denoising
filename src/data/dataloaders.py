@@ -1,10 +1,12 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
-from typing import Optional, Union, List, Dict, Any
 import numpy as np
 
+from torchvision.datasets import MNIST
+from torchvision import transforms
 from src.mnist_patches import MNISTPatches
 from src.noise_generation import NoiseGenerator
+from torch.utils.data import Dataset, DataLoader
+from typing import Optional, Union, List, Dict, Any
 
 
 class NoisyMNISTPatchesDataset(Dataset):
@@ -188,3 +190,30 @@ def create_mnist_patches_dataloaders(
         'train': train_loader,
         'val': val_loader
     }
+
+def train_dataset(n_samples = 200, batch_size = 1):
+    X_train = MNIST(root='./data', train=True, download=True, transform=transforms.Compose([transforms.ToTensor()]))
+
+    # # Leaving only labels 0 and 1
+    idx = np.append(np.where(X_train.targets == 0)[0][:n_samples],
+                    np.where(X_train.targets == 1)[0][:n_samples])
+
+    X_train.data = X_train.data[idx]
+    X_train.targets = X_train.targets[idx]
+
+    train_loader = torch.utils.data.DataLoader(X_train, batch_size=batch_size, shuffle=False, pin_memory=True)
+    return train_loader
+
+
+def test_dataset(n_samples = 200, batch_size = 1):
+    X_test = MNIST(root='./data', train=False, download=True, transform=transforms.Compose([transforms.ToTensor()]))
+
+    # Leaving only labels 0 and 1
+    idx = np.append(np.where(X_test.targets == 0)[0][:n_samples],
+                    np.where(X_test.targets == 1)[0][:n_samples])
+
+    X_test.data = X_test.data[idx]
+    X_test.targets = X_test.targets[idx]
+
+    test_loader = torch.utils.data.DataLoader(X_test, batch_size=batch_size, shuffle=False)
+    return test_loader

@@ -1,6 +1,8 @@
 from qiskit import QuantumCircuit
 from typing import Literal
 
+from qiskit.circuit import ParameterVector
+
 from src.circuits.encoding_circuit import AngleEmbeddingCircuit
 
 
