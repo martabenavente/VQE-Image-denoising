@@ -1,0 +1,5 @@
+numpy
+wandb
+scikit-image
+matplotlib
+pytest
