@@ -47,6 +47,17 @@ class DenoisingMetrics:
             denoised: Model output (B, C, H, W)
             clean: Ground truth clean images (B, C, H, W)
         """
+        # Handle flattened patches (B, features) -> reshape to (B, 1, sqrt(features), sqrt(features))
+        if denoised.dim() == 2:
+            batch_size, num_features = denoised.shape
+            patch_size = int(num_features ** 0.5)
+
+            if patch_size * patch_size != num_features:
+                raise ValueError(f"Cannot reshape {num_features} features into square patch")
+
+            denoised = denoised.view(batch_size, 1, patch_size, patch_size)
+            clean = clean.view(batch_size, 1, patch_size, patch_size)
+
         batch_size = denoised.shape[0]
 
         # Calculate batch metrics
@@ -91,6 +102,21 @@ class DenoisingMetrics:
         denoised_np = denoised.detach().cpu().numpy()
         clean_np = clean.detach().cpu().numpy()
 
+        # Determine appropriate window size based on image size
+        _, _, height, width = denoised_np.shape
+        min_dim = min(height, width)
+
+        # SSIM requires odd window size, max 7, must be <= min dimension
+        if min_dim >= 7:
+            win_size = 7
+        elif min_dim >= 5:
+            win_size = 5
+        elif min_dim >= 3:
+            win_size = 3
+        else:
+            # For very small patches, return MSE-based approximation
+            return 1.0 - _calculate_mse(denoised, clean)
+
         ssim_values = []
         for i in range(denoised_np.shape[0]):
             # Handle grayscale vs RGB
@@ -99,7 +125,8 @@ class DenoisingMetrics:
                 img2 = clean_np[i, 0]
                 ssim = structural_similarity(
                     img1, img2,
-                    data_range=self.data_range
+                    data_range=self.data_range,
+                    win_size=win_size
                 )
             else:  # RGB or multi-channel
                 # Transpose from (C, H, W) to (H, W, C)
@@ -108,7 +135,8 @@ class DenoisingMetrics:
                 ssim = structural_similarity(
                     img1, img2,
                     data_range=self.data_range,
-                    channel_axis=-1
+                    channel_axis=-1,
+                    win_size=win_size
                 )
             ssim_values.append(ssim)
 

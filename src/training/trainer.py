@@ -37,7 +37,7 @@ class QiskitTrainer:
 
     def __init__(
             self,
-            qnn: EstimatorQNN,
+            qnn: TorchConnector,
             loss_fn: nn.Module,
             metrics: Optional[Any] = None,
             optimizer: Optional[torch.optim.Optimizer] = None,
@@ -55,8 +55,7 @@ class QiskitTrainer:
             self.device = torch.device(device)
 
         # Wrap QNN in TorchConnector
-        self.model = TorchConnector(qnn).to(self.device)
-        self.qnn = qnn
+        self.model = qnn.to(self.device)
 
         self.loss_fn = loss_fn.to(self.device)
         self.metrics = metrics
