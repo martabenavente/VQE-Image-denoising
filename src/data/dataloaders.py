@@ -192,7 +192,7 @@ def create_mnist_patches_dataloaders(
     }
 
 def train_dataset(n_samples = 200, batch_size = 1):
-    X_train = MNIST(root='./data', train=True, download=True, transform=transforms.Compose([transforms.ToTensor()]))
+    X_train = MNIST(root='./_dev-data', train=True, download=True, transform=transforms.Compose([transforms.ToTensor()]))
 
     # # Leaving only labels 0 and 1
     idx = np.append(np.where(X_train.targets == 0)[0][:n_samples],
@@ -206,7 +206,7 @@ def train_dataset(n_samples = 200, batch_size = 1):
 
 
 def test_dataset(n_samples = 200, batch_size = 1):
-    X_test = MNIST(root='./data', train=False, download=True, transform=transforms.Compose([transforms.ToTensor()]))
+    X_test = MNIST(root='./_dev-data', train=False, download=True, transform=transforms.Compose([transforms.ToTensor()]))
 
     # Leaving only labels 0 and 1
     idx = np.append(np.where(X_test.targets == 0)[0][:n_samples],

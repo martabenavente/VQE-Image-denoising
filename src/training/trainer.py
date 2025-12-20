@@ -6,7 +6,6 @@ from typing import Dict, Optional, Callable, Any, List
 from pathlib import Path
 from tqdm import tqdm
 
-from qiskit_machine_learning.connectors import TorchConnector
 from noise_generation import add_gaussian_noise
 
 
@@ -37,7 +36,7 @@ class QiskitTrainer:
 
     def __init__(
             self,
-            qnn: TorchConnector,
+            model: nn.Module,
             loss_fn: nn.Module,
             metrics: Optional[Any] = None,
             optimizer: Optional[torch.optim.Optimizer] = None,
@@ -55,7 +54,7 @@ class QiskitTrainer:
             self.device = torch.device(device)
 
         # Wrap QNN in TorchConnector
-        self.model = qnn.to(self.device)
+        self.model = model.to(self.device)
 
         self.loss_fn = loss_fn.to(self.device)
         self.metrics = metrics
@@ -120,11 +119,15 @@ class QiskitTrainer:
             self.metrics.reset()
 
         iterator = tqdm(train_loader, desc=f'Epoch {epoch} [Train]') if verbose else train_loader
-        for batch_idx, batch in enumerate(iterator):
+        for batch_idx, batch in enumerate(train_loader):
             images, _ = batch
 
             # TODO: Update this to do it in Dataloader instead of here
             noisy_images = add_gaussian_noise(images)
+
+            # Move to device
+            images = images.to(self.device)
+            noisy_images = noisy_images.to(self.device)
 
             # Forward pass
             self.optimizer.zero_grad()
@@ -144,7 +147,7 @@ class QiskitTrainer:
             outputs = outputs.detach().view(len(images), 1, 28, 28)
 
             if self.metrics:
-                self.metrics.update(outputs, images)
+                self.metrics.update(outputs.cpu(), images.cpu())
 
             if verbose:
                 iterator.set_postfix({'loss': loss.item()})
@@ -153,7 +156,6 @@ class QiskitTrainer:
         results = {'loss': avg_loss}
 
         if self.metrics:
-            # TODO: Check if metrics are averaged correctly over epoch
             metric_values = self.metrics.compute()
             results.update(metric_values)
 
@@ -185,39 +187,31 @@ class QiskitTrainer:
             self.metrics.reset()
 
         iterator = tqdm(val_loader, desc=f'Epoch {epoch} [{prefix}]') if verbose else val_loader
-
         with torch.no_grad():
-            for batch in iterator:
-                # Unpack batch
-                if isinstance(batch, (tuple, list)):
-                    if len(batch) == 2:
-                        inputs, targets = batch
-                    else:
-                        inputs = batch[0]
-                        targets = batch[-1]
-                else:
-                    raise ValueError("Batch should be tuple/list with at least 2 elements")
+            for batch_idx, batch in enumerate(val_loader):
+                images, _ = batch
 
-                inputs = inputs.to(self.device)
-                targets = targets.to(self.device)
+                # TODO: Update this to do it in Dataloader instead of here
+                noisy_images = add_gaussian_noise(images)
+
+                inputs = noisy_images.to(self.device)
+                targets = images.to(self.device)
 
                 # Forward pass
                 outputs = self.model(inputs)
-
-                # Reshape outputs if needed
-                if outputs.dim() != targets.dim():
-                    outputs = outputs.view(targets.shape)
-
                 loss = self.loss_fn(outputs, targets)
                 epoch_loss += loss.item() * inputs.size(0)
 
+                # TODO: Remove hardcoded reshape
+                outputs = outputs.detach().view(len(images), 1, 28, 28)
+
                 if self.metrics:
-                    self.metrics.update(outputs, targets)
+                    self.metrics.update(outputs.cpu(), targets.cpu())
 
                 if verbose:
                     iterator.set_postfix({'loss': loss.item()})
 
-        avg_loss = epoch_loss / len(val_loader.dataset)
+        avg_loss = epoch_loss / len(val_loader)
         results = {'loss': avg_loss}
 
         if self.metrics:
@@ -413,6 +407,7 @@ class QiskitTrainer:
     ) -> Dict[str, float]:
         """
         Evaluate the model on test data.
+        TODO: Update this method to handle autoencoder style evaluation.
 
         Args:
             test_loader: DataLoader for test data
@@ -437,6 +432,7 @@ class QiskitTrainer:
     ) -> torch.Tensor:
         """
         Make predictions on input data.
+        TODO: Update this method to handle autoencoder style evaluation.
 
         Args:
             inputs: Input tensor (N, ...)

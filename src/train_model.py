@@ -4,14 +4,13 @@ import pickle
 
 from pathlib import Path
 from datetime import datetime
-from qiskit_machine_learning.connectors import TorchConnector
 
 from src.data.dataloaders import train_dataset, test_dataset
 from src.circuits.ansatz_circuit import SimpleAnsatzCircuit
-from src.qnn.qnn_builder import QNNBuilder
 from src.training.trainer import QiskitTrainer
 from src.utils.loss import DenoisingLoss
 from src.utils.metrics import DenoisingMetrics
+from src.qnn.autoencoder_model import ConvDenoiseNet
 
 
 def train_model():
@@ -62,15 +61,15 @@ def train_model():
 
     # Create dataloaders
     print("\n" + "-" * 80)
-    print("Loading MNIST Dataset and Creating Patches...")
+    print("Loading MNIST Dataset...")
     print("-" * 80)
 
-    train_loader = train_dataset(n_samples=500)
-    val_loader = test_dataset(n_samples=50)
+    train_loader = train_dataset(n_samples=160, batch_size=config['batch_size'])
+    val_loader = test_dataset(n_samples=32, batch_size=config['batch_size'])
 
     print(f"\nDataset Statistics:")
-    print(f"  Total training patches: {len(train_loader.dataset):,}")
-    print(f"  Total validation patches: {len(val_loader.dataset):,}")
+    print(f"  Total training images: {len(train_loader.dataset):,}")
+    print(f"  Total validation images: {len(val_loader.dataset):,}")
     print(f"  Training batches: {len(train_loader):,}")
     print(f"  Validation batches: {len(val_loader):,}")
     print(f"  Patch size: 3x3 (9 features)")
@@ -84,12 +83,9 @@ def train_model():
     circuit = SimpleAnsatzCircuit(
         num_qubits=config['num_qubits'],
         num_features=config['num_qubits'],
-        num_parameters=config['num_qubits']
+        num_parameters=config['num_qubits'] * 2
     )
-    qnn_builder = QNNBuilder(circuit_base=circuit)
-    qnn = qnn_builder.build_qnn(input_gradients=True)
-    # TODO: Update this part to adapt the model to AutoEncoder style model
-    model_wrapper = TorchConnector(qnn)
+    model_wrapper = ConvDenoiseNet(circuit=circuit)
 
     print(f"\nQuantum Circuit Details:")
     print(f"  Number of qubits: {config['num_qubits']}")
@@ -123,7 +119,7 @@ def train_model():
     print("-" * 80)
 
     trainer = QiskitTrainer(
-        qnn=model_wrapper,
+        model=model_wrapper,
         loss_fn=loss_fn,
         metrics=metrics,
         optimizer=optimizer,
@@ -172,7 +168,7 @@ def train_model():
         train_loader=train_loader,
         val_loader=val_loader,
         epochs=config['epochs'],
-        verbose=True,
+        verbose=False,
         save_frequency=config['save_frequency'],
         validate_frequency=1,
         on_epoch_end=on_epoch_end
