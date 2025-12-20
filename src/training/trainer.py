@@ -120,10 +120,7 @@ class QiskitTrainer:
 
         iterator = tqdm(train_loader, desc=f'Epoch {epoch} [Train]') if verbose else train_loader
         for batch_idx, batch in enumerate(train_loader):
-            images, _ = batch
-
-            # TODO: Update this to do it in Dataloader instead of here
-            noisy_images = add_gaussian_noise(images)
+            images, noisy_images = batch
 
             # Move to device
             images = images.to(self.device)
@@ -189,10 +186,7 @@ class QiskitTrainer:
         iterator = tqdm(val_loader, desc=f'Epoch {epoch} [{prefix}]') if verbose else val_loader
         with torch.no_grad():
             for batch_idx, batch in enumerate(val_loader):
-                images, _ = batch
-
-                # TODO: Update this to do it in Dataloader instead of here
-                noisy_images = add_gaussian_noise(images)
+                images, noisy_images = batch
 
                 inputs = noisy_images.to(self.device)
                 targets = images.to(self.device)

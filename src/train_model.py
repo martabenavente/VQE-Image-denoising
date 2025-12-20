@@ -18,18 +18,14 @@ def train_model():
 
     # Training configuration
     config = {
-        'stride': 3,
-        'patch_size': (3, 3),
         'batch_size': 16,  # Smaller batches for quantum circuits
-        'train_split': 0.85,
         'epochs': 50,
         'learning_rate': 0.001,
         'weight_decay': 1e-4,
         'gradient_clip': 1.0,
         'early_stopping_patience': 10,
         'save_frequency': 5,
-        'random_seed': 42,
-        'num_qubits': 9,
+        'num_qubits': 4,
         'num_layers': 1,
     }
 
@@ -64,8 +60,8 @@ def train_model():
     print("Loading MNIST Dataset...")
     print("-" * 80)
 
-    train_loader = train_dataset(n_samples=160, batch_size=config['batch_size'])
-    val_loader = test_dataset(n_samples=32, batch_size=config['batch_size'])
+    train_loader = train_dataset(n_samples=2000, batch_size=config['batch_size'])
+    val_loader = test_dataset(n_samples=200, batch_size=config['batch_size'])
 
     print(f"\nDataset Statistics:")
     print(f"  Total training images: {len(train_loader.dataset):,}")
@@ -79,13 +75,12 @@ def train_model():
     print("Building Quantum Neural Network...")
     print("-" * 80)
 
-    # TODO: Check this part to adapt the VQA circuit to the new config
     circuit = SimpleAnsatzCircuit(
         num_qubits=config['num_qubits'],
         num_features=config['num_qubits'],
         num_parameters=config['num_qubits'] * 2
     )
-    model_wrapper = ConvDenoiseNet(circuit=circuit)
+    model_wrapper = ConvDenoiseNet(circuit=circuit, quantum=True)
 
     print(f"\nQuantum Circuit Details:")
     print(f"  Number of qubits: {config['num_qubits']}")

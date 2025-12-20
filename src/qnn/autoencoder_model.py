@@ -13,7 +13,6 @@ class Encoder(nn.Module):
 
     Args:
         num_qubits (int): Number of qubits in the quantum circuit.
-        num_circuits (int): Number of quantum circuits.
         n_filters (int): Number of filters for the convolutional layers.
     """
     def __init__(self, num_qubits: int, n_filters: int = 32):
@@ -22,10 +21,15 @@ class Encoder(nn.Module):
         self.n_filters = n_filters
 
         self.conv1 = nn.Conv2d(1, self.n_filters, 3, padding=1)
-        self.conv2 = nn.Conv2d(self.n_filters, 4, 3, padding=1)
-        self.conv3 = nn.Conv2d(4, 4, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
+        self.bn1 = nn.BatchNorm2d(self.n_filters)
 
+        self.conv2 = nn.Conv2d(self.n_filters, 4, 3, padding=1)
+        self.bn2 = nn.BatchNorm2d(4)
+
+        self.conv3 = nn.Conv2d(4, 4, 3, padding=1)
+        self.bn3 = nn.BatchNorm2d(4)
+
+        self.pool = nn.MaxPool2d(2, 2)
         self.fc2 = nn.Linear(36, num_qubits)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -38,11 +42,11 @@ class Encoder(nn.Module):
         Returns:
             torch.Tensor: Encoded tensor of shape (batch_size, num_qubits).
         """
-        x = F.leaky_relu(self.conv1(x))
+        x = F.leaky_relu(self.bn1(self.conv1(x)))
         x = self.pool(x)
-        x = F.leaky_relu(self.conv2(x))
+        x = F.leaky_relu(self.bn2(self.conv2(x)))
         x = self.pool(x)
-        x = F.leaky_relu(self.conv3(x))
+        x = F.leaky_relu(self.bn3(self.conv3(x)))
         x = self.pool(x)
         x = nn.Flatten()(x)
         x = self.fc2(x)
@@ -61,7 +65,11 @@ class Decoder(nn.Module):
         self.n_filters = n_filters
 
         self.t_conv0 = nn.ConvTranspose2d(4, 4, 3, stride=2)
+        self.bn0 = nn.BatchNorm2d(4)
+
         self.t_conv1 = nn.ConvTranspose2d(4, self.n_filters, 2, stride=2)
+        self.bn1 = nn.BatchNorm2d(self.n_filters)
+
         self.t_conv2 = nn.ConvTranspose2d(self.n_filters, 1, 2, stride=2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -74,8 +82,8 @@ class Decoder(nn.Module):
         Returns:
             torch.Tensor: Reconstructed tensor of shape (batch_size, 1, height, width).
         """
-        x = F.leaky_relu(self.t_conv0(x))
-        x = F.leaky_relu(self.t_conv1(x))
+        x = F.leaky_relu(self.bn0(self.t_conv0(x)))
+        x = F.leaky_relu(self.bn1(self.t_conv1(x)))
         x = F.sigmoid(self.t_conv2(x))
         return x
 
@@ -122,6 +130,45 @@ class QuantumProcessingUnit(nn.Module):
         return x
 
 
+class ClassicalNeck(nn.Module):
+    """
+    Classical Processing Unit using fully connected layers.
+    Acts as the neck between encoder and decoder in the classical baseline autoencoder.
+
+    Args:
+        num_qubits (int): Number of input features (matching quantum model for fair comparison).
+        num_output_features (int): Number of output features (e.g., 36 for decoder input).
+        hidden_dim (int): Hidden layer dimension. Default is 64.
+    """
+
+    def __init__(self, num_qubits: int, num_output_features: int = 36, hidden_dim: int = 16):
+        super(ClassicalNeck, self).__init__()
+        self.num_qubits = num_qubits
+
+        self.fc1 = nn.Linear(num_qubits, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, num_output_features)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through classical layers.
+
+        Args:
+            x (torch.Tensor): Encoded input from encoder, shape (batch_size, num_qubits).
+
+        Returns:
+            torch.Tensor: Processed output, shape (batch_size, 4, 3, 3).
+        """
+        x = x.view(-1, self.num_qubits)
+
+        x = F.leaky_relu(self.fc1(x))
+        x = F.leaky_relu(self.fc2(x))
+        x = self.fc3(x)
+
+        x = x.view(-1, 4, 3, 3)
+        return x
+
+
 class ConvDenoiseNet(nn.Module):
     """
     Hybrid Convolutional Autoencoder with Quantum Layer for Denoising.
@@ -130,14 +177,17 @@ class ConvDenoiseNet(nn.Module):
         n_filters (int): Number of filters for convolutional layers.
         circuit (CircuitBase): Circuit instance with AngleEmbedding for data encoding.
     """
-    def __init__(self, n_filters: int = 32, circuit: CircuitBase = None):
+    def __init__(self, n_filters: int = 32, circuit: CircuitBase = None, quantum: bool = True):
         super(ConvDenoiseNet, self).__init__()
 
         # Encoder
         self.encoder = Encoder(num_qubits=circuit.num_qubits, n_filters=n_filters)
 
         # Quantum layer parameters
-        self.qpu = QuantumProcessingUnit(circuit_base=circuit, num_output_features=36)
+        if quantum:
+            self.qpu = QuantumProcessingUnit(circuit_base=circuit, num_output_features=36)
+        else:
+            self.qpu = ClassicalNeck(num_qubits=circuit.num_qubits, num_output_features=36)
 
         # Decoder
         self.decoder = Decoder(n_filters=n_filters)
