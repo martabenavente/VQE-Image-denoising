@@ -6,7 +6,7 @@ from typing import Dict, Optional, Callable, Any, List
 from pathlib import Path
 from tqdm import tqdm
 
-from noise_generation import add_gaussian_noise
+from src.noise_generation import add_gaussian_noise
 
 
 class QiskitTrainer:
@@ -45,7 +45,10 @@ class QiskitTrainer:
             checkpoint_dir: Optional[Path] = None,
             early_stopping_patience: Optional[int] = None,
             early_stopping_metric: str = 'loss',
-            early_stopping_mode: str = 'min'
+            early_stopping_mode: str = 'min',
+            logger=None,
+            log_images_every_n: int = 0,
+            max_log_images: int = 8,
     ):
         if device == 'auto':
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -76,6 +79,11 @@ class QiskitTrainer:
         self.early_stopping_mode = early_stopping_mode
         self._early_stopping_counter = 0
         self._best_metric = float('inf') if early_stopping_mode == 'min' else float('-inf')
+
+        # Logger
+        self.logger = logger
+        self.log_images_every_n = log_images_every_n
+        self.max_log_images = max_log_images
 
         # Learning rate scheduler (can be set via set_scheduler)
         self.scheduler: Optional[Any] = None
@@ -333,64 +341,95 @@ class QiskitTrainer:
         Returns:
             Training history dictionary
         """
-        for epoch in tqdm(range(1, epochs + 1)):
-            # Training
-            train_metrics = self._train_epoch(train_loader, epoch, verbose)
-            self.history['train_loss'].append(train_metrics['loss'])
 
-            for key, value in train_metrics.items():
-                if key != 'loss':
-                    history_key = f'train_{key}'
-                    if history_key not in self.history:
-                        self.history[history_key] = []
-                    self.history[history_key].append(value)
+        try:
+            for epoch in tqdm(range(1, epochs + 1)):
+                # Training
+                train_metrics = self._train_epoch(train_loader, epoch, verbose)
 
-            # Validation
-            val_metrics = None
-            if val_loader is not None and epoch % validate_frequency == 0:
-                val_metrics = self._validate_epoch(val_loader, epoch, verbose)
-                self.history['val_loss'].append(val_metrics['loss'])
+                # w&b logging
+                if getattr(self, "logger", None) is not None:
+                    try:
+                        wb_train = {f"train/{k}": float(v) for k, v in train_metrics.items()}
+                        try:
+                            wb_train["train/lr"] = float(self.optimizer.param_groups[0]["lr"])
+                        except Exception:
+                            pass
+                        self.logger.log_scalars(wb_train, step=epoch)
+                    except Exception as e:
+                        print(f"w&b train logging failed: {e}")
 
-                for key, value in val_metrics.items():
+                self.history['train_loss'].append(train_metrics['loss'])
+
+                for key, value in train_metrics.items():
                     if key != 'loss':
-                        history_key = f'val_{key}'
+                        history_key = f'train_{key}'
                         if history_key not in self.history:
                             self.history[history_key] = []
                         self.history[history_key].append(value)
 
-            # Learning rate scheduling
-            if self.scheduler is not None:
-                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    # ReduceLROnPlateau needs a metric
-                    metric = val_metrics['loss'] if val_metrics else train_metrics['loss']
-                    self.scheduler.step(metric)
-                else:
-                    self.scheduler.step()
+                # Validation
+                val_metrics = None
+                if val_loader is not None and epoch % validate_frequency == 0:
+                    val_metrics = self._validate_epoch(val_loader, epoch, verbose)
 
-            # Print epoch summary
-            if verbose:
-                summary = f"Epoch {epoch}/{epochs} - Train Loss: {train_metrics['loss']:.6f}"
-                if val_metrics:
-                    summary += f" - Val Loss: {val_metrics['loss']:.6f}"
-                print(summary)
+                    # w&b logging
+                    if getattr(self, "logger", None) is not None:
+                        try:
+                            wb_val = {f"val/{k}": float(v) for k, v in val_metrics.items()}
+                            self.logger.log_scalars(wb_val, step=epoch)
+                        except Exception as e:
+                            print(f"w&b val logging failed: {e}")
 
-            # Checkpointing
-            if save_frequency > 0 and epoch % save_frequency == 0:
-                self.save_checkpoint(epoch, val_metrics or train_metrics)
-            if val_metrics and self.checkpoint_dir:
-                is_best = (val_metrics[self.early_stopping_metric] == self._best_metric)
-                if is_best:
-                    self.save_checkpoint(epoch, val_metrics, is_best=True)
+                    self.history['val_loss'].append(val_metrics['loss'])
 
-            # Early stopping
-            if val_metrics and self._check_early_stopping(val_metrics):
+                    for key, value in val_metrics.items():
+                        if key != 'loss':
+                            history_key = f'val_{key}'
+                            if history_key not in self.history:
+                                self.history[history_key] = []
+                            self.history[history_key].append(value)
+
+                # Learning rate scheduling
+                if self.scheduler is not None:
+                    if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                        # ReduceLROnPlateau needs a metric
+                        metric = val_metrics['loss'] if val_metrics else train_metrics['loss']
+                        self.scheduler.step(metric)
+                    else:
+                        self.scheduler.step()
+
+                # Print epoch summary
                 if verbose:
-                    print(f"Early stopping triggered at epoch {epoch}")
-                break
+                    summary = f"Epoch {epoch}/{epochs} - Train Loss: {train_metrics['loss']:.6f}"
+                    if val_metrics:
+                        summary += f" - Val Loss: {val_metrics['loss']:.6f}"
+                    print(summary)
 
-            # Custom callback
-            if on_epoch_end is not None:
-                on_epoch_end(epoch, train_metrics, val_metrics)
+                # Checkpointing
+                if save_frequency > 0 and epoch % save_frequency == 0:
+                    self.save_checkpoint(epoch, val_metrics or train_metrics)
+                if val_metrics and self.checkpoint_dir:
+                    is_best = (val_metrics[self.early_stopping_metric] == self._best_metric)
+                    if is_best:
+                        self.save_checkpoint(epoch, val_metrics, is_best=True)
+
+                # Early stopping
+                if val_metrics and self._check_early_stopping(val_metrics):
+                    if verbose:
+                        print(f"Early stopping triggered at epoch {epoch}")
+                    break
+
+                # Custom callback
+                if on_epoch_end is not None:
+                    on_epoch_end(epoch, train_metrics, val_metrics)
+        
+        finally:
+            if getattr(self, "logger", None) is not None:
+                try:
+                    self.logger.close()
+                except Exception as e:
+                    print(f"w&b close failed: {e}")
 
         return self.history
 
