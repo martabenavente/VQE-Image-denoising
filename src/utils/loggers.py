@@ -1,7 +1,7 @@
 import wandb
-from typing import Dict, Optional
-import matplotlib.pyplot as plt
 import numpy as np
+
+from typing import Dict, Optional
 
 
 class WandBMetricLogger:
@@ -21,9 +21,8 @@ class WandBMetricLogger:
             metrics: Dictionary of metric names and values.
             step: Optional training step or epoch.
         """
-        
         payload = {f"{prefix}{k}": v for k, v in metrics.items()}
-        wandb.log(payload, step=step)
+        self.run.log(payload, step=step)
 
     def log_image_examples(self, clean: np.ndarray, noisy: Optional[np.ndarray] = None, denoised: Optional[np.ndarray] = None, 
                            max_images: int = 8, step: Optional[int] = None, key: str = "examples"):
@@ -46,7 +45,7 @@ class WandBMetricLogger:
                 row["denoised"] = wandb.Image(denoised[i])
             rows.append(row)
 
-        wandb.log({key: rows}, step=step)
+        self.run.log({key: rows}, step=step)
 
     ## This should be used as a summary to visualize COMPLETE histories at the end of training/eval,
     ## not during it as w&b already creates plots when scalars are logged.
@@ -71,7 +70,7 @@ class WandBMetricLogger:
                 data=[[i, v] for i, v in enumerate(values)],
                 columns=["epoch", "value"]
             )
-            wandb.log({
+            self.run.log({
                 f"{prefix}{key}": wandb.plot.line(
                     table, "epoch", "value", title=key
                 )

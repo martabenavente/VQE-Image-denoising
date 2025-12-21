@@ -44,4 +44,5 @@ dependencies:
   - qiskit-machine-learning
   - torchvision
   - scikit-image
+  - wandb
 prefix: /home/yeray142/miniconda3/envs/VQE-Image-denoising
