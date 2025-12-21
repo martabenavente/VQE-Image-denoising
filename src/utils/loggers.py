@@ -23,7 +23,7 @@ class WandBMetricLogger:
         """
         
         payload = {f"{prefix}{k}": v for k, v in metrics.items()}
-        wandb.log(payload, step=step)
+        self.run(payload, step=step)
 
     def log_image_examples(self, clean: np.ndarray, noisy: Optional[np.ndarray] = None, denoised: Optional[np.ndarray] = None, 
                            max_images: int = 8, step: Optional[int] = None, key: str = "examples"):
@@ -46,7 +46,7 @@ class WandBMetricLogger:
                 row["denoised"] = wandb.Image(denoised[i])
             rows.append(row)
 
-        wandb.log({key: rows}, step=step)
+        self.log({key: rows}, step=step)
 
     ## This should be used as a summary to visualize COMPLETE histories at the end of training/eval,
     ## not during it as w&b already creates plots when scalars are logged.
@@ -71,7 +71,7 @@ class WandBMetricLogger:
                 data=[[i, v] for i, v in enumerate(values)],
                 columns=["epoch", "value"]
             )
-            wandb.log({
+            self.log({
                 f"{prefix}{key}": wandb.plot.line(
                     table, "epoch", "value", title=key
                 )

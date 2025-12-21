@@ -103,6 +103,17 @@ class QiskitTrainer:
         """
         self.scheduler = scheduler
 
+    def _iter_steps(self, loader: DataLoader, steps: Optional[int]):
+        """Iterate over a DataLoader but stop after 'steps' batches."""
+
+        if steps is None:
+            yield from loader
+        else:
+            for i, batch in enumerate(loader):
+                if i >= steps:
+                    break
+                yield batch
+
     def _train_epoch(
             self,
             train_loader: DataLoader,
@@ -122,12 +133,13 @@ class QiskitTrainer:
         """
         self.model.train()
         epoch_loss = 0.0
+        num_samples = 0
 
         if self.metrics:
             self.metrics.reset()
 
         iterator = tqdm(train_loader, desc=f'Epoch {epoch} [Train]') if verbose else train_loader
-        for batch_idx, batch in enumerate(train_loader):
+        for batch_idx, batch in enumerate(iterator):
             images, noisy_images = batch
 
             # Move to device
@@ -146,10 +158,14 @@ class QiskitTrainer:
                     self.gradient_clip
                 )
             self.optimizer.step()
-            epoch_loss += loss.item() * images.size(0)
+            
+            bs = noisy_images.size(0)
+            num_samples += bs
+            epoch_loss += loss.item() * bs
 
-            # TODO: Remove hardcoded reshape
-            outputs = outputs.detach().view(len(images), 1, 28, 28)
+            outputs = outputs.detach()
+            if outputs.shape != images.shape:
+                outputs = outputs.reshape(images.shape)
 
             if self.metrics:
                 self.metrics.update(outputs.cpu(), images.cpu())
@@ -157,7 +173,7 @@ class QiskitTrainer:
             if verbose:
                 iterator.set_postfix({'loss': loss.item()})
 
-        avg_loss = epoch_loss / len(train_loader)
+        avg_loss = epoch_loss / max(1, num_samples)
         results = {'loss': avg_loss}
 
         if self.metrics:
@@ -171,7 +187,8 @@ class QiskitTrainer:
             val_loader: DataLoader,
             epoch: int,
             verbose: bool = True,
-            prefix: str = 'Val'
+            prefix: str = 'Val',
+            steps: Optional[int] = None
     ) -> Dict[str, float]:
         """
         Execute one validation/test epoch.
@@ -191,21 +208,29 @@ class QiskitTrainer:
         if self.metrics:
             self.metrics.reset()
 
-        iterator = tqdm(val_loader, desc=f'Epoch {epoch} [{prefix}]') if verbose else val_loader
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(val_loader):
-                images, noisy_images = batch
+        base_iter = self._iter_steps(val_loader, steps)
+        iterator = tqdm(base_iter, desc=f"Epoch {epoch} [{prefix}]") if verbose else base_iter
 
+        epoch_loss = 0.0
+        num_samples = 0
+
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(iterator):
+                images, noisy_images = batch
                 inputs = noisy_images.to(self.device)
                 targets = images.to(self.device)
 
                 # Forward pass
                 outputs = self.model(inputs)
                 loss = self.loss_fn(outputs, targets)
-                epoch_loss += loss.item() * inputs.size(0)
 
-                # TODO: Remove hardcoded reshape
-                outputs = outputs.detach().view(len(images), 1, 28, 28)
+                bs = inputs.size(0)
+                num_samples += bs
+                epoch_loss += loss.item() * bs
+
+
+                if outputs.shape != targets.shape:
+                    outputs = outputs.reshape(targets.shape)
 
                 if self.metrics:
                     self.metrics.update(outputs.cpu(), targets.cpu())
@@ -213,8 +238,9 @@ class QiskitTrainer:
                 if verbose:
                     iterator.set_postfix({'loss': loss.item()})
 
-        avg_loss = epoch_loss / len(val_loader)
+        avg_loss = epoch_loss / max(1, num_samples)
         results = {'loss': avg_loss}
+
 
         if self.metrics:
             metric_values = self.metrics.compute()
@@ -383,6 +409,39 @@ class QiskitTrainer:
 
                     self.history['val_loss'].append(val_metrics['loss'])
 
+                    # image logging
+                    if (
+                        getattr(self, "logger", None) is not None
+                        and self.log_images_every_n
+                        and epoch % self.log_images_every_n == 0
+                    ):
+                        try:
+                            clean, noisy = next(iter(val_loader))
+                            clean = clean[: self.max_log_images].to(self.device)
+                            noisy = noisy[: self.max_log_images].to(self.device)
+
+                            self.model.eval()
+                            with torch.no_grad():
+                                denoised = self.model(noisy)
+
+                            if denoised.dim() == 2:
+                                denoised_img = denoised.detach().view(len(clean), 1, 28, 28)
+                            else:
+                                denoised_img = denoised.detach()
+
+                            clean_img = clean.detach()
+                            noisy_img = noisy.detach()
+                            if hasattr(self.logger, "log_image_examples"):
+                                self.logger.log_image_examples(
+                                    clean=clean_img.cpu().numpy(),
+                                    noisy=noisy_img.cpu().numpy(),
+                                    denoised=denoised_img.cpu().numpy(),
+                                    step=epoch,
+                                    key="examples/denoising",
+                                )
+                        except Exception as e:
+                            print(f"w&b image logging failed: {e}")
+
                     for key, value in val_metrics.items():
                         if key != 'loss':
                             history_key = f'val_{key}'
@@ -436,7 +495,8 @@ class QiskitTrainer:
     def evaluate(
             self,
             test_loader: DataLoader,
-            verbose: bool = True
+            verbose: bool = True,
+            evaluation_steps: Optional[int] = None
     ) -> Dict[str, float]:
         """
         Evaluate the model on test data.
@@ -449,7 +509,7 @@ class QiskitTrainer:
         Returns:
             Dictionary with test metrics
         """
-        test_metrics = self._validate_epoch(test_loader, 0, verbose, prefix='Test')
+        test_metrics = self._validate_epoch(test_loader, 0, verbose, prefix='Test', steps=evaluation_steps)
 
         if verbose:
             print("\nTest Results:")
@@ -461,7 +521,8 @@ class QiskitTrainer:
     def predict(
             self,
             inputs: torch.Tensor,
-            batch_size: Optional[int] = None
+            batch_size: Optional[int] = None,
+            predict_steps: Optional[int] = None
     ) -> torch.Tensor:
         """
         Make predictions on input data.
@@ -477,16 +538,21 @@ class QiskitTrainer:
         self.model.eval()
 
         with torch.no_grad():
-            if batch_size is None:
-                inputs = inputs.to(self.device)
-                outputs = self.model(inputs)
-            else:
-                # Process in batches
-                outputs_list = []
-                for i in range(0, len(inputs), batch_size):
-                    batch = inputs[i:i + batch_size].to(self.device)
-                    batch_outputs = self.model(batch)
-                    outputs_list.append(batch_outputs.cpu())
-                outputs = torch.cat(outputs_list, dim=0)
+            if isinstance(inputs, DataLoader):
+                outs = []
+                for batch in self._iter_steps(inputs, predict_steps):
+                    # batch = (clean, noisy)
+                    noisy = batch[1].to(self.device)
+                    out = self.model(noisy).detach().cpu()
+                    outs.append(out)
+                return torch.cat(outs, dim=0) if outs else torch.empty(0)
 
-        return outputs
+            x = inputs
+            if batch_size is None:
+                return self.model(x.to(self.device)).detach().cpu()
+
+            outs = []
+            for i in range(0, len(x), batch_size):
+                xb = x[i:i + batch_size].to(self.device)
+                outs.append(self.model(xb).detach().cpu())
+            return torch.cat(outs, dim=0) if outs else torch.empty(0)
