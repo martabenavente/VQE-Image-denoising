@@ -1,7 +1,7 @@
 import wandb
-from typing import Dict, Optional
-import matplotlib.pyplot as plt
 import numpy as np
+
+from typing import Dict, Optional
 
 
 class WandBMetricLogger:
@@ -21,9 +21,8 @@ class WandBMetricLogger:
             metrics: Dictionary of metric names and values.
             step: Optional training step or epoch.
         """
-        
         payload = {f"{prefix}{k}": v for k, v in metrics.items()}
-        wandb.log(payload, step=step)
+        self.run.log(payload, step=step)
 
     def log_image_examples(self, clean: np.ndarray, noisy: Optional[np.ndarray] = None, denoised: Optional[np.ndarray] = None, 
                            max_images: int = 8, step: Optional[int] = None, key: str = "examples"):
@@ -36,17 +35,29 @@ class WandBMetricLogger:
             denoised: Denoised output images (optional)
             step: Optional training step.
         """
-        
-        rows = []
+        images = []
         for i in range(min(max_images, len(clean))):
-            row = {"clean": wandb.Image(clean[i])}
-            if noisy is not None:
-                row["noisy"] = wandb.Image(noisy[i])
-            if denoised is not None:
-                row["denoised"] = wandb.Image(denoised[i])
-            rows.append(row)
+            # Squeeze single-channel dimensions if present
+            clean_img = np.squeeze(clean[i])
 
-        wandb.log({key: rows}, step=step)
+            caption = f"Sample {i}"
+
+            # Create side-by-side comparison
+            if noisy is not None and denoised is not None:
+                noisy_img = np.squeeze(noisy[i])
+                denoised_img = np.squeeze(denoised[i])
+
+                # Concatenate horizontally: noisy | denoised | clean
+                comparison = np.concatenate([noisy_img, denoised_img, clean_img], axis=1)
+                images.append(wandb.Image(comparison, caption=caption))
+            elif denoised is not None:
+                denoised_img = np.squeeze(denoised[i])
+                comparison = np.concatenate([denoised_img, clean_img], axis=1)
+                images.append(wandb.Image(comparison, caption=caption))
+            else:
+                images.append(wandb.Image(clean_img, caption=caption))
+
+        self.run.log({key: images}, step=step)
 
     ## This should be used as a summary to visualize COMPLETE histories at the end of training/eval,
     ## not during it as w&b already creates plots when scalars are logged.
@@ -71,7 +82,7 @@ class WandBMetricLogger:
                 data=[[i, v] for i, v in enumerate(values)],
                 columns=["epoch", "value"]
             )
-            wandb.log({
+            self.run.log({
                 f"{prefix}{key}": wandb.plot.line(
                     table, "epoch", "value", title=key
                 )

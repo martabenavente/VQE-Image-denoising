@@ -1,4 +1,3 @@
-import kagglehub
 import numpy as np
 import os
 import struct
@@ -18,46 +17,67 @@ def load_idx_labels(filename):
         return labels
 
 
-def extract_patches_4x4(img, stride=4):
+def extract_patches(img, patch_size=(4, 4), stride=None):
     """
+    Extract patches from an image.
+
     Args:
-        img: numpy array (28, 28)
-        stride: jump between parches
+        img: numpy array (H, W)
+        patch_size: tuple (patch_height, patch_width)
+        stride: tuple (stride_h, stride_w) or int. If None, defaults to patch_size
 
     Returns:
-        numpy array (num_patches, 4, 4)
+        numpy array (num_patches, patch_height, patch_width)
     """
     H, W = img.shape
-    patches = []
+    patch_h, patch_w = patch_size
 
-    for i in range(0, H - 4 + 1, stride):
-        for j in range(0, W - 4 + 1, stride):
-            patch = img[i:i+4, j:j+4]
+    # Default stride to patch size if not specified
+    if stride is None:
+        stride_h, stride_w = patch_h, patch_w
+    elif isinstance(stride, int):
+        stride_h = stride_w = stride
+    else:
+        stride_h, stride_w = stride
+
+    patches = []
+    for i in range(0, H - patch_h + 1, stride_h):
+        for j in range(0, W - patch_w + 1, stride_w):
+            patch = img[i:i+patch_h, j:j+patch_w]
             patches.append(patch)
 
     return np.array(patches)
 
 
 class MNISTPatches:
-    def __init__(self, stride=4):
-        """Downloads dataset and prepare train images."""
+    def __init__(self, patch_size=(4, 4), stride=None, data_path="_dev-data/datasets/hojjatk/mnist-dataset/versions/1"):
+        """
+        Downloads dataset and prepare train images.
+
+        Args:
+            patch_size: tuple (height, width) for patch dimensions
+            stride: int or tuple for stride. If None, uses patch_size
+            data_path: path to MNIST dataset
+        """
+        self.patch_size = patch_size if isinstance(patch_size, tuple) else (patch_size, patch_size)
         self.stride = stride
 
-        # Descargar dataset UNA sola vez
-        path = kagglehub.dataset_download("hojjatk/mnist-dataset")
-        print("Dataset path:", path)
-
-        train_images_path = os.path.join(path, "train-images.idx3-ubyte")
-        train_labels_path = os.path.join(path, "train-labels.idx1-ubyte")
+        train_images_path = os.path.join(data_path, "train-images.idx3-ubyte")
+        train_labels_path = os.path.join(data_path, "train-labels.idx1-ubyte")
 
         self.X_train = load_idx_images(train_images_path)
         self.y_train = load_idx_labels(train_labels_path)
+
+        # Filter only images with label 0 and take first 100
+        zero_mask = self.y_train == 0
+        self.X_train = self.X_train[zero_mask][:100]
+        self.y_train = self.y_train[zero_mask][:100]
 
     def get_image(self, idx):
         """Returns an image 28x28 from the train set."""
         return self.X_train[idx]
 
     def get_patches(self, idx):
-        """Returns a 4x4 patch from the idxth image."""
+        """Returns patches of configured size from the idxth image."""
         img = self.get_image(idx)
-        return extract_patches_4x4(img, stride=self.stride)
+        return extract_patches(img, patch_size=self.patch_size, stride=self.stride)

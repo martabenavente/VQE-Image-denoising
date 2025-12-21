@@ -30,9 +30,14 @@ class QNNBuilder:
 
         self.observable: SparsePauliOp
         if observable is None:
-            self.observable = SparsePauliOp.from_list(
-                [( 'Z' * circuit_base.num_qubits, 1.0 )]
-            )
+            num_qubits = circuit_base.num_qubits
+            self.observable = []
+            for i in range(num_qubits):
+                # Create 'I...IZI...I' with Z on qubit i
+                pauli_string = 'I' * i + 'Z' + 'I' * (circuit_base.num_qubits - i - 1)
+                self.observable.append(
+                    SparsePauliOp.from_list([(pauli_string, 1.0)])
+                )
         else:
             self.observable = observable
 

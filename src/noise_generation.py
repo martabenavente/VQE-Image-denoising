@@ -102,3 +102,6 @@ class NoiseGenerator:
 
         return noise + img
 
+def add_gaussian_noise(images, sigma=0.5):
+    return torch.clamp(torch.distributions.Normal(0, sigma).sample(images.shape) + images, 0., 1.)
+

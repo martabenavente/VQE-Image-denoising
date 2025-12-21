@@ -1,5 +1,5 @@
 import pytest
-from mnist_patches import MNISTPatches
+from src.mnist_patches import MNISTPatches
 
 
 def test_get_image_shape():
