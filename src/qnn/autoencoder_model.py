@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from qiskit_machine_learning.connectors import TorchConnector
 
-from circuits.circuit_base import CircuitBase
-from qnn.qnn_builder import QNNBuilder
+from src.circuits.circuit_base import CircuitBase
+from src.qnn.qnn_builder import QNNBuilder
 
 
 class Encoder(nn.Module):

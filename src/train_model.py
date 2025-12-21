@@ -11,6 +11,7 @@ from src.training.trainer import QiskitTrainer
 from src.utils.loss import DenoisingLoss
 from src.utils.metrics import DenoisingMetrics
 from src.qnn.autoencoder_model import ConvDenoiseNet
+from src.utils.loggers import WandBMetricLogger
 
 
 def train_model():
@@ -27,6 +28,10 @@ def train_model():
         'save_frequency': 5,
         'num_qubits': 4,
         'num_layers': 1,
+        "use_wandb": True, 
+        "wandb_project": "vqe-image-denoising",
+        "wandb_run_name": None,
+        "wandb_log_images_every_n": 0 # Add an int in case we want to activate
     }
 
     # Noise configurations - multiple types for variety
@@ -108,6 +113,15 @@ def train_model():
         patience=5
     )
 
+    # Setup logger
+    wandb_logger = None
+    if config.get("use_wandb", False):
+        wandb_logger = WandBMetricLogger(
+            project=config.get("wandb_project", "vqe-image-denoising"),
+            name=config.get("wandb_run_name", None),
+            config=config
+        )
+
     # Create trainer
     print("\n" + "-" * 80)
     print("Initializing Trainer...")
@@ -123,7 +137,9 @@ def train_model():
         checkpoint_dir=checkpoint_dir,
         early_stopping_patience=config['early_stopping_patience'],
         early_stopping_metric='loss',
-        early_stopping_mode='min'
+        early_stopping_mode='min',
+        logger=wandb_logger,
+        log_images_every_n=int(config.get("wandb_log_images_every_n", 0) or 0)
     )
     trainer.set_scheduler(scheduler)
 
