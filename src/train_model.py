@@ -31,7 +31,7 @@ def train_model():
         "use_wandb": True, 
         "wandb_project": "vqe-image-denoising",
         "wandb_run_name": None,
-        "wandb_log_images_every_n": 0 # Add an int in case we want to activate
+        "wandb_log_images_every_n": 1 # Add an int in case we want to activate
     }
 
     print("=" * 80)
@@ -55,8 +55,8 @@ def train_model():
     print("Loading MNIST Dataset...")
     print("-" * 80)
 
-    train_loader = train_dataset(n_samples=2000, batch_size=config['batch_size'])
-    val_loader = test_dataset(n_samples=200, batch_size=config['batch_size'])
+    train_loader = train_dataset(n_samples=100, batch_size=config['batch_size'])
+    val_loader = test_dataset(n_samples=5, batch_size=config['batch_size'])
 
     print(f"\nDataset Statistics:")
     print(f"  Total training images: {len(train_loader.dataset):,}")
