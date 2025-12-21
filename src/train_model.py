@@ -34,15 +34,6 @@ def train_model():
         "wandb_log_images_every_n": 0 # Add an int in case we want to activate
     }
 
-    # Noise configurations - multiple types for variety
-    noise_configs = [
-        {'noise_type': 'gaussian', 'mean': 0.0, 'std': 0.1},
-        {'noise_type': 'gaussian', 'mean': 0.0, 'std': 0.15},
-        {'noise_type': 'gaussian', 'mean': 0.0, 'std': 0.2},
-        {'noise_type': 'uniform', 'low': -0.1, 'high': 0.1},
-        {'noise_type': 'uniform', 'low': -0.15, 'high': 0.15},
-    ]
-
     print("=" * 80)
     print("QUANTUM IMAGE DENOISING - TRAINING")
     print("=" * 80)
@@ -50,7 +41,6 @@ def train_model():
     print(f"\nConfiguration:")
     for key, value in config.items():
         print(f"  {key}: {value}")
-    print(f"\nNoise Types: {len(noise_configs)} different configurations")
 
     # Create checkpoint directory
     checkpoint_dir = Path('checkpoints') / datetime.now().strftime('%Y%m%d_%H%M%S')
