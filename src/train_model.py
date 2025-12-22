@@ -84,6 +84,12 @@ def train_model():
     print(f"  Weight parameters: {len(circuit.weight_params)}")
     print(f"  Total parameters: {len(circuit.feature_params) + len(circuit.weight_params)}")
 
+    # Total params models and trainable params
+    total_params = sum(p.numel() for p in model_wrapper.parameters())
+    trainable_params = sum(p.numel() for p in model_wrapper.parameters() if p.requires_grad)
+    print(f"  Total model parameters: {total_params}")
+    print(f"  Trainable model parameters: {trainable_params}")
+
     # Setup loss and metrics
     loss_fn = DenoisingLoss(loss_type='mse')
     metrics = DenoisingMetrics(data_range=1.0)
