@@ -104,7 +104,7 @@ The full report describing the methodology, experiments and results is available
 ## Model architecture
 
 <p align="center">
-  <img src="tools/Imgs/hybrid_vqe_denoising_diagram.png" width="800">
+  <img src="tools/Imgs/Quantum_autoencoder_diagram.png" width="800">
 </p>
 
 ## Team Members
