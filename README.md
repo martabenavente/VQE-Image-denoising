@@ -10,6 +10,9 @@
     </p>
 </p>
 
+> [!IMPORTANT]
+> The final version of the report is available online at https://www.overleaf.com/read/kxydwfxdhqqn#8e4338
+
 <!-- TABLE OF CONTENTS -->
 <details>
   <summary>Table of Contents</summary>
@@ -19,7 +22,6 @@
     <li><a href="#environment-setup">Environment setup</a></li>
     <li><a href="#how-to-run">How to run</a></li>
     <li><a href="#input-and-output-data">Input and output data</a></li>
-    <li><a href="#report">Report</a></li>
     <li><a href="#team-members">Team Members</a></li>
     <li><a href="#license">License</a></li>
   </ol>
@@ -87,6 +89,12 @@ General workflow:
   3. Train the hybrid model and/or baseline.
   4. Evaluate denoising performance with standard metrics.
 
+This repository includes a ready-to-use training script that runs the full hybrid quantum–classical denoising pipeline. From the project root, run:
+
+```bash
+python -m src.train_model
+```
+
 
 ## Input and output data
 
@@ -97,10 +105,6 @@ General workflow:
 ### Output
 - Denoised images from both models (hybrid and baseline).
 - Metrics such as PSNR, SSIM, etc., comparing the original clean images with their noisy counterparts and the denoised ones obtained by each model.
-
-## Report (online version)
-
-**Important:** The final version of the report is available online at https://www.overleaf.com/read/kxydwfxdhqqn#8e4338
 
 ## Model architecture
 
