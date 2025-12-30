@@ -56,6 +56,7 @@ The project's file structure is organized as follows:
 │   │   ├── ...
 │   ├── tools/
 │   │   ├── plot_wandb_metrics.py
+│   │   ├── ...
 │   ├── .gitingore
 │   ├── README.md
 │   ├── environment.yml
@@ -72,8 +73,9 @@ conda activate vqe-denoising
 ```
 
 ### Pip
+```bash
 pip install -r requirements.txt
-
+```
 
 ## How to run
 
@@ -102,7 +104,7 @@ The full report describing the methodology, experiments and results is available
 ## Model architecture
 
 <p align="center">
-  <img src="Images/hybrid_vqe_denoising_diagram.png" width="800">
+  <img src="tools/Imgs/hybrid_vqe_denoising_diagram.png" width="800">
 </p>
 
 ## Team Members
