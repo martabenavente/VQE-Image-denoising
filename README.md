@@ -98,8 +98,9 @@ General workflow:
 - Denoised images from both models (hybrid and baseline).
 - Metrics such as PSNR, SSIM, etc., comparing the original clean images with their noisy counterparts and the denoised ones obtained by each model.
 
-## Report
-The full report describing the methodology, experiments and results is available in the report/ directory.
+## Report (online version)
+
+**Important:** The final version of the report is available online at https://www.overleaf.com/read/kxydwfxdhqqn#8e4338
 
 ## Model architecture
 
