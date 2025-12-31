@@ -1,0 +1,17 @@
+{
+    "batch_size": 16,
+    "epochs": 50,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "gradient_clip": 1.0,
+    "early_stopping_patience": 10,
+    "save_frequency": 5,
+    "num_qubits": 4,
+    "num_layers": 1,
+    "use_wandb": true,
+    "wandb_project": "vqe-image-denoising",
+    "wandb_run_name": "CLASSICAL_L1_sigma1_bs16",
+    "wandb_log_images_every_n": 1,
+    "sigma": 1,
+    "seed": 1
+}

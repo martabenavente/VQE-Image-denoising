@@ -2,6 +2,7 @@ import torch
 import json
 import pickle
 import random
+import argparse
 
 import numpy as np
 
@@ -17,27 +18,17 @@ from src.qnn.autoencoder_model import ConvDenoiseNet
 from src.utils.loggers import WandBMetricLogger
 
 
-def train_model():
-    """Train quantum denoising model with optimized configuration."""
+def train_model(config_path):
+    """
+    Train quantum denoising model with optimized configuration.
 
-    # Training configuration
-    config = {
-        'batch_size': 16,
-        'epochs': 50,
-        'learning_rate': 0.001,
-        'weight_decay': 1e-4,
-        'gradient_clip': 1.0,
-        'early_stopping_patience': 10,
-        'save_frequency': 5,
-        'num_qubits': 4,
-        'num_layers': 1,
-        "use_wandb": True, 
-        "wandb_project": "vqe-image-denoising",
-        "wandb_run_name": "CLASSICAL_L1_sigma1_bs16",
-        "wandb_log_images_every_n": 1,
-        "sigma": 1,
-        "seed": 1
-    }
+    Args:
+        config_path (str): Path to the JSON configuration file.
+    """
+
+    # Load configuration from JSON file
+    with open(config_path, 'r') as f:
+        config = json.load(f)
 
     print("=" * 80)
     print("QUANTUM IMAGE DENOISING - TRAINING")
@@ -220,4 +211,9 @@ def train_model():
 
 
 if __name__ == '__main__':
-    trainer, history = train_model()
+    parser = argparse.ArgumentParser(description='Train quantum denoising model')
+    parser.add_argument('--config', type=str, default='config.json',
+                        help='Path to configuration JSON file')
+    args = parser.parse_args()
+
+    trainer, history = train_model(args.config)
