@@ -1,6 +1,9 @@
 import torch
 import json
 import pickle
+import random
+
+import numpy as np
 
 from pathlib import Path
 from datetime import datetime
@@ -19,7 +22,7 @@ def train_model():
 
     # Training configuration
     config = {
-        'batch_size': 16,  # Smaller batches for quantum circuits
+        'batch_size': 16,
         'epochs': 50,
         'learning_rate': 0.001,
         'weight_decay': 1e-4,
@@ -30,8 +33,10 @@ def train_model():
         'num_layers': 1,
         "use_wandb": True, 
         "wandb_project": "vqe-image-denoising",
-        "wandb_run_name": None,
-        "wandb_log_images_every_n": 1 # Add an int in case we want to activate
+        "wandb_run_name": "CLASSICAL_L1_sigma1_bs16",
+        "wandb_log_images_every_n": 1,
+        "sigma": 1,
+        "seed": 1
     }
 
     print("=" * 80)
@@ -41,6 +46,12 @@ def train_model():
     print(f"\nConfiguration:")
     for key, value in config.items():
         print(f"  {key}: {value}")
+
+    # Set seeds
+    torch.manual_seed(config['seed'])
+    random.seed(config['seed'])
+    np.random.seed(config['seed'])
+    
 
     # Create checkpoint directory
     checkpoint_dir = Path('checkpoints') / datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -55,8 +66,8 @@ def train_model():
     print("Loading MNIST Dataset...")
     print("-" * 80)
 
-    train_loader = train_dataset(n_samples=100, batch_size=config['batch_size'])
-    val_loader = test_dataset(n_samples=5, batch_size=config['batch_size'])
+    train_loader = train_dataset(n_samples=2000, batch_size=config['batch_size'], sigma=config['sigma'])
+    val_loader = test_dataset(n_samples=200, batch_size=config['batch_size'], sigma=config['sigma'])
 
     print(f"\nDataset Statistics:")
     print(f"  Total training images: {len(train_loader.dataset):,}")
@@ -73,9 +84,10 @@ def train_model():
     circuit = SimpleAnsatzCircuit(
         num_qubits=config['num_qubits'],
         num_features=config['num_qubits'],
-        num_parameters=config['num_qubits'] * 2
+        num_parameters=config['num_qubits'] * 2 * config['num_layers'],
+        num_layers=config['num_layers']
     )
-    model_wrapper = ConvDenoiseNet(circuit=circuit, quantum=True)
+    model_wrapper = ConvDenoiseNet(circuit=circuit, quantum=False)
 
     print(f"\nQuantum Circuit Details:")
     print(f"  Number of qubits: {config['num_qubits']}")

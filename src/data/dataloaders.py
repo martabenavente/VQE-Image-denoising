@@ -17,19 +17,20 @@ class NoisyMNISTDataset(Dataset):
         add_noise_fn: Function that takes a clean image tensor and returns a noisy image tensor
     """
 
-    def __init__(self, mnist_dataset):
+    def __init__(self, mnist_dataset, sigma):
         self.mnist_dataset = mnist_dataset
+        self.sigma = sigma
 
     def __len__(self):
         return len(self.mnist_dataset)
 
     def __getitem__(self, idx):
         clean_img, label = self.mnist_dataset[idx]
-        noisy_img = add_gaussian_noise(clean_img.unsqueeze(0)).squeeze(0)
+        noisy_img = add_gaussian_noise(clean_img.unsqueeze(0), self.sigma).squeeze(0)
         return clean_img, noisy_img  # (ground_truth, input)
 
 
-def train_dataset(n_samples = 200, batch_size = 1, target_classes=None):
+def train_dataset(n_samples = 200, batch_size = 1, target_classes=None, sigma=0.25):
     """
     Create dataloader for training dataset with noisy MNIST images.
 
@@ -48,13 +49,13 @@ def train_dataset(n_samples = 200, batch_size = 1, target_classes=None):
 
     X_train.data = X_train.data[idx]
     X_train.targets = X_train.targets[idx]
-    X_train = NoisyMNISTDataset(X_train)
+    X_train = NoisyMNISTDataset(X_train, sigma)
 
     train_loader = torch.utils.data.DataLoader(X_train, batch_size=batch_size, shuffle=False, pin_memory=True)
     return train_loader
 
 
-def test_dataset(n_samples = 200, batch_size = 1, target_classes=None):
+def test_dataset(n_samples = 200, batch_size = 1, target_classes=None, sigma=0.25):
     """
     Create dataloader for test dataset with clean MNIST images.
 
@@ -73,7 +74,7 @@ def test_dataset(n_samples = 200, batch_size = 1, target_classes=None):
 
     X_test.data = X_test.data[idx]
     X_test.targets = X_test.targets[idx]
-    X_test = NoisyMNISTDataset(X_test)
+    X_test = NoisyMNISTDataset(X_test, sigma)
 
     test_loader = torch.utils.data.DataLoader(X_test, batch_size=batch_size, shuffle=False)
     return test_loader
